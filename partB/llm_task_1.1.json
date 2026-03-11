@@ -1,0 +1,15 @@
+{
+  "task_id": "task_1.1",
+  "topic": "Reproduction of dual coordinate descent for linear SVM (Hsieh et al., ICML 2008)",
+  "llm_used": true,
+  "tool": "Cursor AI agent (ChatGPT)",
+  "date": "2026-03-11",
+  "what_was_used_for": [
+    "Explaining the paper and mapping algorithm equations to code",
+    "Implementing/optimizing DCDSVM (sparse inner loop, w maintenance)",
+    "Adding convergence evaluation (reference w*, relative primal error plot)",
+    "Drafting run instructions and documentation"
+  ],
+  "notes": "Review and adjust this disclosure to match your course's required schema (if any)."
+}
+
