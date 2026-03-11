@@ -1,62 +1,143 @@
-## Dual Coordinate Descent SVM Reproduction (RCV1 / Hsieh et al. 2008)
+# Dual Coordinate Descent SVM Reproduction (RCV1 / Hsieh et al. 2008)
 
 This repository contains a reproduction of the paper:
 
-> Cho-Jui Hsieh, Kai-Wei Chang, Chih-Jen Lin, S. Sathiya Keerthi, S. Sundararajan,  
+> Cho-Jui Hsieh, Kai-Wei Chang, Chih-Jen Lin, S. Sathiya Keerthi, S. Sundararajan
 > **“A Dual Coordinate Descent Method for Large-scale Linear SVM”**, ICML 2008.
 
 The main work is in the notebook `svm_dcd_reproduction.ipynb`, which:
 
-- Implements the **dual coordinate descent (DCD)** algorithm for **linear SVM** (L1- and L2-loss) as described in Algorithm 1 of the paper.
-- Uses the **RCV1** text dataset (as in the paper) via `sklearn.datasets.fetch_rcv1`.
-- Compares DCD to standard linear SVM baselines.
-- Computes a **reference optimal solution** `w*` and plots **relative primal error** over time, similar to the convergence figures in the paper.
+* Implements the **Dual Coordinate Descent (DCD)** algorithm for **linear SVM** (L1- and L2-loss) as described in Algorithm 1 of the paper.
+* Uses the **RCV1 text dataset** via `sklearn.datasets.fetch_rcv1`.
+* Compares DCD with standard **linear SVM baselines**.
+* Computes a **reference optimal solution `w*`** and plots **relative primal error over time**, similar to the convergence plots shown in the paper.
 
 ---
 
-### Algorithm Overview
+# Algorithm Overview
 
-- **Problem**: Linear SVM in primal form  
-  \[
-    \min_w \frac12 \|w\|^2 + C \sum_i \xi(w;x_i,y_i)
-  \]
-  with L1-loss \(\xi = \max(1 - y_i w^\top x_i, 0)\) or L2-loss \(\xi = \max(1 - y_i w^\top x_i, 0)^2\).
+## 1. Primal Problem
 
-- **Dual form**: Quadratic problem in dual variables \(\alpha_i\) with box constraints:
-  \[
-    \min_\alpha f(\alpha) = \frac12 \alpha^\top \bar{Q} \alpha - e^\top \alpha,\quad 0 \le \alpha_i \le U
-  \]
-  where \(\bar{Q} = Q + D\), \(Q_{ij} = y_i y_j x_i^\top x_j\), and \(D\) depends on the loss (L1 vs L2).
+The **linear SVM optimization problem** in primal form is:
 
-- **DCD idea**:
-  - Maintain the **primal weight** \(w = \sum_j y_j \alpha_j x_j\).
-  - At each inner iteration, pick one coordinate \(i\) (random permutation per epoch), and solve the **1‑D quadratic subproblem** in \(\alpha_i\) exactly:
-    \[
-      \alpha_i \leftarrow \text{clip}\left(\alpha_i - \frac{\nabla_i f(\alpha)}{\bar{Q}_{ii}},\; 0,\; U\right)
-    \]
-  - Update \(w\) cheaply using:
-    \[
-      w \leftarrow w + (\alpha_i^{\text{new}} - \alpha_i^{\text{old}}) y_i x_i
-    \]
-  - Use **sparse operations** and avoid materializing the kernel matrix.
+```
+min_w   1/2 ||w||² + C Σ_i ξ(w; x_i, y_i)
+```
 
-- **Key properties**:
-  - Each update is \(O(\bar{n})\), where \(\bar{n}\) is the average number of nonzeros per instance.
-  - Proven **linear convergence** in terms of dual objective.
-  - Works for both **L1‑SVM** and **L2‑SVM** (via different `D` and `U`).
+where the loss term is defined as:
 
-In the notebook this is implemented as the `DCDSVM` class, with:
+### L1-loss (hinge loss)
 
-- Support for **L1** and **L2** loss (`loss="l1"` / `"l2"`).
-+- A sparse inner loop (`xi_sparse.dot(w)`) and dense `w` update only when \(\alpha_i\) changes.
-+- Optional logging of the **primal objective** during training.
-+- A convergence driver that runs until the **relative error** \(|f_P(w) - f_P(w^*)| / |f_P(w^*)|\) reaches a target (e.g. 1%).
+```
+ξ = max(1 − y_i (wᵀx_i), 0)
+```
+
+### L2-loss (squared hinge loss)
+
+```
+ξ = max(1 − y_i (wᵀx_i), 0)²
+```
 
 ---
 
-### How to Run the Notebook Locally
+## 2. Dual Problem
 
-#### 1. Clone the repository
+The corresponding **dual optimization problem** becomes:
+
+```
+min_α   f(α) = 1/2 αᵀ Q̄ α − eᵀ α
+```
+
+subject to:
+
+```
+0 ≤ α_i ≤ U
+```
+
+Where:
+
+* `Q_ij = y_i y_j x_iᵀ x_j`
+* `Q̄ = Q + D`
+* `D` depends on the loss function (L1 or L2)
+
+---
+
+## 3. Dual Coordinate Descent (DCD)
+
+The key idea of **Dual Coordinate Descent** is to optimize one dual variable `α_i` at a time while maintaining the **primal weight vector**:
+
+```
+w = Σ_j y_j α_j x_j
+```
+
+For each coordinate update:
+
+```
+α_i ← clip( α_i − ∇_i f(α) / Q̄_ii , 0 , U )
+```
+
+After updating `α_i`, the weight vector is updated efficiently:
+
+```
+w ← w + (α_i(new) − α_i(old)) y_i x_i
+```
+
+---
+
+# Key Properties of the Algorithm
+
+* Each coordinate update costs **O(n̄)**
+  where `n̄` = average number of **non-zero features** per example.
+
+* The algorithm achieves **linear convergence** in terms of the **dual objective**.
+
+* The implementation avoids constructing the full **kernel matrix**, making it suitable for **large-scale datasets**.
+
+* Works for both:
+
+  * **L1-SVM**
+  * **L2-SVM**
+
+---
+
+# Implementation Details
+
+The notebook implements a class:
+
+```
+DCDSVM
+```
+
+with features including:
+
+* Support for **L1-loss** and **L2-loss**
+
+```
+DCDSVM(loss="l1")
+DCDSVM(loss="l2")
+```
+
+* Sparse inner loop computation:
+
+```
+xi_sparse.dot(w)
+```
+
+* Efficient weight update only when `α_i` changes
+
+* Optional logging of the **primal objective** during training
+
+* A convergence driver that tracks **relative primal error**
+
+```
+rel_err(w) = |f_P(w) − f_P(w*)| / |f_P(w*)|
+```
+
+---
+
+# How to Run the Notebook Locally
+
+## 1. Clone the Repository
 
 ```bash
 git clone https://github.com/<your-username>/230131_midsem.git
@@ -65,68 +146,180 @@ cd 230131_midsem
 
 Replace `<your-username>` with the actual GitHub owner if different.
 
-#### 2. Create and activate a Python environment (recommended)
+---
 
-Using `venv`:
+## 2. Create a Python Environment (Recommended)
+
+Using **venv**:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate    # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
 ```
 
-Or using `conda`:
+Windows:
+
+```bash
+.venv\Scripts\activate
+```
+
+Or using **conda**:
 
 ```bash
 conda create -n dcd_svm python=3.10 -y
 conda activate dcd_svm
 ```
 
-#### 3. Install dependencies
+---
 
-This project uses only standard scientific Python packages:
+## 3. Install Dependencies
 
 ```bash
 pip install numpy scipy scikit-learn matplotlib jupyter
 ```
 
-#### 4. Start Jupyter and open the notebook
+---
+
+## 4. Start Jupyter Notebook
 
 ```bash
 jupyter notebook
 ```
 
-Then in the browser, open:
+Then open:
 
-- `svm_dcd_reproduction.ipynb`
+```
+svm_dcd_reproduction.ipynb
+```
 
-and run all cells from top to bottom.
-
-> **Note**: Downloading and processing the full RCV1 dataset (677,399 instances) can take some time and memory. If your machine is limited, you can edit the notebook cell that sets `sample_size` and choose a smaller value (e.g. `sample_size = 80000`) for quicker experiments.
-
----
-
-### Reproduced Results and Plots
-
-The notebook produces:
-
-- **Training time and test accuracy** for:
-  - DCD L2‑SVM (`DCDSVM(loss="l2")`)
-  - DCD L1‑SVM (`DCDSVM(loss="l1")`)
-  - `LinearSVC` (squared hinge, no bias)
-  - `SGDClassifier` (hinge)
-- A **convergence plot** of **relative primal error vs. time** for DCD L2‑SVM, on a log scale, analogous to Figure 1 in the paper:
-  - First, a long DCD run computes an approximate optimum `w*` (with small dual gap).
-  - Then, a convergence loop runs DCD epoch by epoch, tracking
-    \[
-      \text{rel\\_err}(w) = \\frac{|f_P(w) - f_P(w^*)|}{|f_P(w^*)|}
-    \]
-    until it drops below a chosen tolerance (e.g. 1%).
-
-These allow you to compare both **optimization speed** (time to a given relative error) and **predictive performance** (test accuracy) of DCD versus standard baselines.
+and run all cells.
 
 ---
 
-### Notes and Possible Extensions
+# Dataset Notes
 
-- The current reproduction focuses on **batch DCD** without shrinking; Algorithm 3 (shrinking, DCDL1‑S / DCDL2‑S) can be added as a follow‑up.
-- The paper also compares against Pegasos, TRON, PCD, and SVMperf; reproducing all these baselines would require additional external solvers and is not included here.
+The notebook downloads the **RCV1 dataset** automatically using:
+
+```
+sklearn.datasets.fetch_rcv1
+```
+
+Dataset size:
+
+```
+677,399 instances
+47,236 features
+```
+
+Because of the dataset size, initial loading may take time.
+
+If your system has limited memory, modify:
+
+```
+sample_size = 80000
+```
+
+inside the notebook to run faster experiments.
+
+---
+
+# Reproduced Experiments
+
+The notebook compares several models:
+
+### Dual Coordinate Descent
+
+* DCD L2-SVM
+
+```
+DCDSVM(loss="l2")
+```
+
+* DCD L1-SVM
+
+```
+DCDSVM(loss="l1")
+```
+
+### Baselines
+
+* `LinearSVC` (squared hinge loss)
+
+* `SGDClassifier` (hinge loss)
+
+---
+
+# Evaluation Metrics
+
+The notebook reports:
+
+### Training Time
+
+Total optimization runtime.
+
+### Test Accuracy
+
+Classification accuracy on held-out data.
+
+### Convergence Speed
+
+Measured using **relative primal error**:
+
+```
+rel_err(w) = |f_P(w) − f_P(w*)| / |f_P(w*)|
+```
+
+A long DCD run first computes an approximate optimal solution `w*`.
+
+Then training is repeated epoch-by-epoch while measuring how quickly the algorithm approaches the optimum.
+
+---
+
+# Convergence Plot
+
+The notebook produces a plot of:
+
+```
+Relative Primal Error vs Time
+```
+
+on a **log scale**, similar to **Figure 1 in the original paper**.
+
+This demonstrates the **optimization efficiency of DCD** for large-scale linear SVMs.
+
+---
+
+# Possible Extensions
+
+This reproduction focuses on **basic batch DCD**.
+
+Possible improvements include:
+
+### Shrinking Heuristics
+
+Implement Algorithm 3 from the paper:
+
+* `DCDL1-S`
+* `DCDL2-S`
+
+### Additional Baselines
+
+Compare with other solvers mentioned in the paper:
+
+* Pegasos
+* TRON
+* Parallel Coordinate Descent (PCD)
+* SVMperf
+
+These require additional external implementations and are not included in this repository.
+
+---
+
+# Reference
+
+Cho-Jui Hsieh, Kai-Wei Chang, Chih-Jen Lin,
+S. Sathiya Keerthi, S. Sundararajan.
+
+**A Dual Coordinate Descent Method for Large-scale Linear SVM**
+
+International Conference on Machine Learning (ICML), 2008.
